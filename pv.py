@@ -25,6 +25,7 @@ class MoveLabel(QLabel):
         self.translations = QPoint(0, 0)
         self.old_scale = self.parent.cur_scale
         self.painter = QPainter()
+        self.reallyDoAdd = self.doAdd = True
         # self.mov = QPoint(0, 0)
 
     def wheelEvent(self, event):
@@ -37,7 +38,16 @@ class MoveLabel(QLabel):
         # self.translations = QPoint(0, 0)
         # self.translations = QPoint(self.width() // 2, self.height() // 2)
         # self.parent.cur_img = self.parent.movedImg
+        so = 1 + self.parent.cur_scale
         self.parent.zoom_func(change)
+        sn = 1 + self.parent.cur_scale
+        pw, ph = self.pixmap().width(), self.pixmap().height()
+        ar = pw / ph
+
+        if pw > ph:
+            self.translations = QPointF(self.translations.x() * sn/so, self.translations.x() * sn/so * ar**-1)
+        else:
+            self.translations = QPointF(self.translations.y() * sn/so * ar, self.translations.y() * sn/so)
 
     def mousePressEvent(self, event):
         # self.translations = QPoint(-event.pos().x(), -event.pos().y())
@@ -66,16 +76,21 @@ class MoveLabel(QLabel):
             # if x >= 0 and y >= 0 and x <= self.width() and y <= self.height():
             # print("BRUSH: ", p.brushOrigin())
             finalt = self.translations + tvec
-            print(self.height(), self.width())
-            if finalt.y() < 2/3 * self.height() and finalt.y() > 2/3 * -self.height() and finalt.x() > 2/3 * -self.width() and finalt.x() < 2/3 * self.width(): 
+            # print(self.height(), self.width())
+            pw, ph = self.pixmap().width(), self.pixmap().height()
+            cutoff = 2/3
+            print("CUTOFF:", QPointF(pw, ph) * cutoff)
+            if finalt.y() < cutoff * ph and finalt.y() > cutoff * -ph and finalt.x() > cutoff * -pw and finalt.x() < cutoff * pw: 
                 p.translate(finalt)
                 self.tvec = tvec
+                self.doAdd = True
             else:
+                self.doAdd = False
                 # self.tvec = tvec
                 nut = QPoint(0, 0)
-                if finalt.y() > 2/3 * self.height() or finalt.y() < 2/3 * -self.height():
+                if finalt.y() > cutoff * ph or finalt.y() < cutoff * -ph:
                     nut += QPoint(0, self.tvec.y())
-                if finalt.x() < 2/3 * -self.width() or finalt.x() > 2/3 * self.width():
+                if finalt.x() < cutoff * -pw or finalt.x() > cutoff * pw:
                     nut += QPoint(self.tvec.x(), 0)
 
                 if nut.x() == 0:
@@ -92,7 +107,8 @@ class MoveLabel(QLabel):
             #     p.translate(self.translations)
             p.drawPixmap(0, 0, img)
             # p.setBrushOrigin(self.translations + tvec)
-            print(finalt)
+            print("FINAL VECTOR:", finalt)
+            print("TOTAL:", self.translations)
             p.end()
 
             final = QPixmap.fromImage(baseImg)
@@ -100,7 +116,14 @@ class MoveLabel(QLabel):
             self.setPixmap(final)
 
     def mouseReleaseEvent(self, event):
-        self.translations += self.tvec
+        if self.doAdd:
+            self.reallyDoAdd = True
+            
+        if self.reallyDoAdd:
+            self.translations += self.tvec
+        if not self.doAdd:
+            self.reallyDoAdd = False
+        
         # self.translations = QPoint(self.tvec)
 
     def mouseDoubleClickEvent(self, event):
@@ -271,11 +294,11 @@ class Window(QMainWindow):
             self.slider.bar.setValue(bar_full)
         
         if bar_full != 0:
-            self._img = self.scaleImg(self.curImg, scale)
+            self._img = self.scaleImg(self.movedImg, scale)
         else:
             self._img = self.scaleImg(self.curImg, scale)
             self.movedImg = self.curImg
-        self.img.translations = QPoint(0, 0)
+            self.img.translations = QPoint(0, 0)
 
         self.img.old_scale = self.cur_scale
         self.cur_scale = scale
