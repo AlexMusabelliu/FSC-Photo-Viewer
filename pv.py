@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, ctypes
 from PySide2.QtWidgets import *
 from PySide2.QtCore import *
 from PySide2.QtGui import *
@@ -146,9 +146,11 @@ class Window(QMainWindow):
         self.cur_scale = 0
         self.rotTog = False
 
-        self.neighbors = [os.path.abspath(x) for x in os.listdir(os.path.abspath(os.path.dirname(self.passedImage)))]
+        self.neighbors = [os.path.abspath(x) for x in os.listdir(os.path.abspath(os.path.dirname(self.passedImage))) if self.check_valid_img(os.path.abspath(x))]
         # print(self.neighbors)
         self.cur_pos = self.neighbors.index(self.passedImage)
+
+        self.canLeft, self.canRight = self.check_move()
 
         os.chdir(os.path.abspath(os.path.dirname(self.passedImage)))
 
@@ -157,8 +159,6 @@ class Window(QMainWindow):
         self.img.setStyleSheet("max-width:750;max-height:600;min-width:750;min-height:600;")
         print(self.img.size())
         self.img.setAlignment(Qt.AlignCenter)
-        
-        self.set_image(self.passedImage)
 
         header = self.makeHeader()
         buttons = self.makeButtons()
@@ -167,11 +167,31 @@ class Window(QMainWindow):
         layout.addWidget(self.img, alignment=Qt.AlignCenter)
         layout.addLayout(buttons)
 
+        self.set_image(self.passedImage)
+
         self.wdg = QWidget(self)
         self.wdg.setLayout(layout)
         self.setCentralWidget(self.wdg)
 
         self.zoom_func(0)
+
+    def check_valid_img(self, img):
+        # print(img)
+        return True
+
+    def check_move(self):
+        l = r = True
+        if self.cur_pos == len(self.neighbors) - 1:
+            r = False
+        if self.cur_pos == 0:
+            l = False
+
+        return l, r
+
+    def check_buttons(self):
+        l, r = self.check_move()
+        self.LB.setEnabled(l)
+        self.RB.setEnabled(r)
 
     def set_image(self, nuimg):
         self.setWindowTitle("FSC Photo Viewer - " + nuimg.split("\\")[-1])
@@ -185,19 +205,29 @@ class Window(QMainWindow):
             self._img = QPixmap(nuimg)
             self._img = self._img.scaled(self.img.size(), Qt.KeepAspectRatio)
             self.img.setPixmap(self._img)
+
+            self.passedImage = nuimg
+            self.curImg = self.movedImg = self._img
+            
+            self.rotate.setEnabled(True)
+
         except:
             text = "Could not load file"
+            self.rotate.setEnabled(False)
+
         self.img.setText(text)
 
     def goLeft(self):
         if self.cur_pos > 0:
             self.set_image(self.neighbors[self.cur_pos - 1])
             self.cur_pos -= 1
+        self.check_buttons()
 
     def goRight(self):
         if self.cur_pos < len(self.neighbors) - 1:
             self.set_image(self.neighbors[self.cur_pos + 1])
             self.cur_pos += 1
+        self.check_buttons()
 
     def _rotate(self):
         # old_s = self.cur_scale
@@ -237,14 +267,26 @@ class Window(QMainWindow):
 
     def makeButtons(self):
         button = QHBoxLayout()
-        left, right = QPushButton("<"), QPushButton(">")
+        left, right = QPushButton(), QPushButton()
+        left.setObjectName("left")
+        right.setObjectName("right")
+
+        left.setEnabled(self.canLeft)
+        right.setEnabled(self.canRight)
+
         left.clicked.connect(self.goLeft)
         right.clicked.connect(self.goRight)
-        rot = QPushButton("<-|")
+
+        rot = QPushButton()
         rot.clicked.connect(self.rotateCW)
+        rot.setObjectName("rotate")
+
         button.addWidget(left)
         button.addWidget(right)
         button.addWidget(rot)
+
+        self.LB, self.RB = left, right
+        self.rotate = rot
 
         return button
 
@@ -254,17 +296,11 @@ class Window(QMainWindow):
         # parent = Qt.QCoreApplication.instance()
         parent = QCoreApplication.instance()
         if dire:
-            nustyle = '''QMainWindow{
-                background-color:black;
-            }
-            QPushButton{
-                border: 1px solid white;
-                background-color:black;
-                color:white;
-                min-height:20px;
-            }'''
+            with open("dark.qss", "r") as f:
+                nustyle = f.read()
         else:
-            nustyle = ''''''
+            with open("design.qss", "r") as f:
+                nustyle = f.read()
         parent.setStyleSheet(nustyle)
 
     def scaleImg(self, oimg, *args):
@@ -316,9 +352,15 @@ class Window(QMainWindow):
 
     def makeHeader(self):
         head = QHBoxLayout()
-        info = QPushButton("I")
-        more = QPushButton(":")
-        zoom = QPushButton("Z")
+        info = QPushButton()
+        more = QPushButton()
+        zoom = QPushButton()
+
+        info.setObjectName("info")
+        more.setObjectName("more")
+        zoom.setObjectName("zoom")
+
+        # more.setIcon(QIcon("rotate.png"))
 
         zoom_menu = QMenu(zoom)
         zoom.setMenu(zoom_menu)
@@ -368,6 +410,9 @@ def main():
 
     form = Window()
     form.show()
+
+    appid = 'fsc photoviewer v1'
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(appid)
 
     app.setStyleSheet(getQSS())
     

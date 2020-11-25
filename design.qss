@@ -1,0 +1,15 @@
+QPushButton#rotate
+{
+    image: url("rotate.png");
+    max-width:30px;
+}
+
+QPushButton#left
+{
+    image:url("back.png")
+}
+
+QPushButton#right
+{
+    image:url("next.png")
+}
