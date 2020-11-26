@@ -1,4 +1,4 @@
-import os, sys, ctypes
+import os, sys, ctypes, colorsys
 from PySide2.QtWidgets import *
 from PySide2.QtCore import *
 from PySide2.QtGui import *
@@ -134,6 +134,78 @@ class MoveLabel(QLabel):
         elif self.parent.cur_scale == 0:
             self.parent.zoom_func(99)
 
+class EnhancedButton(QPushButton):
+    def __init__(self, icon=None, size=None, parent=None):
+        super(EnhancedButton, self).__init__()
+        self.parent = parent
+        self.setFocusPolicy(Qt.NoFocus)
+        self.setStyleSheet("background:transparent;")
+        self.setIcon(QIcon(icon))
+
+        if size:
+            self.setIconSize(QSize(size, size))
+        else:
+            self.setIconSize(QSize(80, 80))
+
+        self.color = self.parent.palette().window().color()
+        # print(self.color.name())
+
+    def convert_to_hsv(self, value):
+        if type(value) == int:
+            v = hex(value)[2:]
+        elif type(value) == str:
+            v = value[2:]
+        else:
+            return None
+
+        # print(v)
+
+        r, g, b = int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16)
+        # print(r, g, b)
+        h, s, v = colorsys.rgb_to_hsv(r, g, b)
+        
+        return (h, s, v)
+        # v *= .92
+
+    def convert_to_hex(self, *value):
+        h, s, v = value
+
+        r, g, b = colorsys.hsv_to_rgb(h, s, v)
+
+        # print(r, g, b)
+
+        return hex(b + g * 16**2 + r * 16**4)
+    # def mouseReleaseEvent(self, event):
+    #     # color = self.palette().window().color()
+    #     pass
+
+    # def mousePressEvent(self, event):
+    #     # super(EnhancedButton, self).mousePressEvent(event)
+    #     # color = self.palette().window().color()
+    #     pass
+
+    def enterEvent(self, event):
+        # color = self.palette().window().color()
+        # lightColor = (int(self.color.name()[1:], 16) & 0x7f7f7f) << 1
+        hcolor = self.convert_to_hsv(int(self.color.name()[1:], 16))
+        h, s, v = hcolor
+        # print(hcolor)
+        s = round(s * .92)
+        lightColor = self.convert_to_hex(h, s, v)
+        # print(lightColor)
+
+        if lightColor == "0x0":
+            lightColor = "0x000000"
+
+        self.setStyleSheet(f"background:#{lightColor[2:]}")
+
+    def leaveEvent(self, event):
+        # color = self.palette().window().color()
+        # print(self.color.name())
+        self.setStyleSheet("background:transparent;")
+
+
+
 class Window(QMainWindow):
     def __init__(self):
         super(Window, self).__init__()
@@ -160,10 +232,10 @@ class Window(QMainWindow):
         print(self.img.size())
         self.img.setAlignment(Qt.AlignCenter)
 
-        header = self.makeHeader()
+        # header = self.makeHeader()
         buttons = self.makeButtons()
         layout = QVBoxLayout()
-        layout.addLayout(header)
+        # layout.addLayout(header)
         layout.addWidget(self.img, alignment=Qt.AlignCenter)
         layout.addLayout(buttons)
 
@@ -177,7 +249,14 @@ class Window(QMainWindow):
 
     def check_valid_img(self, img):
         # print(img)
-        return True
+        valid_types = ["gif", "tiff", "jpg", "jpeg", "png", "bmp"]
+        loaded = self.try_load(img)
+        if loaded:
+            return True
+        elif img[img.rfind(".") + 1:].lower() in valid_types:
+            return True
+        else:
+            return False
 
     def check_move(self):
         l = r = True
@@ -193,25 +272,30 @@ class Window(QMainWindow):
         self.LB.setEnabled(l)
         self.RB.setEnabled(r)
 
-    def set_image(self, nuimg):
-        self.setWindowTitle("FSC Photo Viewer - " + nuimg.split("\\")[-1])
-        text = ""
-        # print("BASED")
+    def try_load(self, nuimg):
         try:
             t = QImage(nuimg)
             if not t:
                 raise ValueError
+            return True
 
+        except:
+            return False
+
+    def set_image(self, nuimg):
+        self.setWindowTitle("FSC Photo Viewer - " + nuimg.split("\\")[-1])
+        text = ""
+        # print("BASED")
+        couldLoad = self.try_load(nuimg)
+        if couldLoad:
             self._img = QPixmap(nuimg)
             self._img = self._img.scaled(self.img.size(), Qt.KeepAspectRatio)
             self.img.setPixmap(self._img)
 
             self.passedImage = nuimg
             self.curImg = self.movedImg = self._img
-            
             self.rotate.setEnabled(True)
-
-        except:
+        else:
             text = "Could not load file"
             self.rotate.setEnabled(False)
 
@@ -264,31 +348,6 @@ class Window(QMainWindow):
         self.movedImg = self.curImg
 
         self.img.setPixmap(self.curImg)
-
-    def makeButtons(self):
-        button = QHBoxLayout()
-        left, right = QPushButton(), QPushButton()
-        left.setObjectName("left")
-        right.setObjectName("right")
-
-        left.setEnabled(self.canLeft)
-        right.setEnabled(self.canRight)
-
-        left.clicked.connect(self.goLeft)
-        right.clicked.connect(self.goRight)
-
-        rot = QPushButton()
-        rot.clicked.connect(self.rotateCW)
-        rot.setObjectName("rotate")
-
-        button.addWidget(left)
-        button.addWidget(right)
-        button.addWidget(rot)
-
-        self.LB, self.RB = left, right
-        self.rotate = rot
-
-        return button
 
     def toggle_darkmode(self, dire):
         # self.setStyleSheet("background-color:black;")
@@ -350,11 +409,52 @@ class Window(QMainWindow):
 
         self.img.setPixmap(self._img)
 
-    def makeHeader(self):
-        head = QHBoxLayout()
-        info = QPushButton()
-        more = QPushButton()
-        zoom = QPushButton()
+    def makeButtons(self):
+        def makeSpacer():
+            spacer = QWidget()
+            spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            return spacer
+
+        # def add_bar(to_add):
+        #     for b in to_add:
+        #         bar.addWidget(b)
+        #         bar.addWidget(makeSpacer())
+
+        def add_bar(to_add):
+            for b in to_add:
+                bar.addWidget(b)
+                b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        left, right = EnhancedButton("back.png", parent=self), EnhancedButton("next.png", parent=self)
+        left.setObjectName("left")
+        right.setObjectName("right")
+
+        left.setEnabled(self.canLeft)
+        right.setEnabled(self.canRight)
+
+        left.clicked.connect(self.goLeft)
+        right.clicked.connect(self.goRight)
+
+        rot = EnhancedButton("rotate.png", parent=self)
+        rot.clicked.connect(self.rotateCW)
+        rot.setObjectName("rotate")
+
+        self.LB, self.RB = left, right
+        self.rotate = rot
+
+        but = QHBoxLayout()
+        info = EnhancedButton("info.png", size=50, parent=self)
+        more = EnhancedButton("more.png", size=50, parent=self)
+        zoom = EnhancedButton("zoom.png", parent=self)
+
+        bar = QToolBar()
+        barcol = int(bar.palette().window().color().name()[1:], 16)
+        # print("BARCOL:", barcol)
+        hsv = EnhancedButton.convert_to_hsv(self, barcol)
+        h, s, v = hsv
+        v = round(v * .92)
+        nuCol = EnhancedButton.convert_to_hex(self, h, s, v)
+        bar.setStyleSheet(f"background-color:#{nuCol[2:]}")
 
         info.setObjectName("info")
         more.setObjectName("more")
@@ -381,11 +481,24 @@ class Window(QMainWindow):
         # more_bar.addWidget(more)
         # more.clicked.connect()
 
-        head.addWidget(info)
-        head.addWidget(zoom)
-        head.addWidget(more)
+        # buttons = [info, zoom, left, right, rot, more]
+        leftS, rightS = QWidget(), QWidget()
 
-        return head
+        leftS.setObjectName("sidespacer")
+        rightS.setObjectName("sidespacer")
+
+        add_bar([info,])
+        bar.addWidget(leftS)
+        
+        add_bar([zoom, left, right, rot])
+
+        bar.addWidget(rightS)
+        add_bar([more,])
+        
+        but.addWidget(bar)
+        # bar.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Maximum)
+
+        return but
 
     def setBasic(self):
         height, width = 950, 1000

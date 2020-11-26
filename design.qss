@@ -1,15 +1,24 @@
-QPushButton#rotate
+QWidget#sidespacer
 {
-    image: url("rotate.png");
-    max-width:30px;
+    min-width:150px;
 }
 
-QPushButton#left
-{
-    image:url("back.png")
+QToolBar{
+    /* background-color:blue; */
+    background-color:#d8d8d8;
+    min-height:100px;
+    /* spacing:100px; */
 }
 
-QPushButton#right
+QPushButton
 {
-    image:url("next.png")
+    /* max-width:30px; */
+    min-width:80px;
+    min-height:80px;
+    /* background:red; */
+    background:transparent;
+}
+
+QPushButton::menu-indicator{
+    image:none;
 }
